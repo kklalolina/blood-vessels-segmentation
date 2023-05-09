@@ -128,3 +128,93 @@ class App:
 
         # zapis do pliku
         resimage.save("output.png")
+        self.createErrorMatrix()
+
+    def createErrorMatrix(self):
+        # kolory w RGB
+        WHITE = (255,255,255)
+        BLACK = (0,0,0)
+        RED = (255,0,0)
+        GREEN = (0,255,0)
+
+        # macierz pomyłek
+        errormatrix = np.array([[0,0],[0,0]])
+
+        # wzięcie odpowiedniego obrazu 'idealnego' (z folderu manual1) na podstawie wejściowego
+        inputimgname = self.images[0].filename[7:-4]
+
+        # Gold Standard image
+        gsimg = Image.open('manual1/'+inputimgname+'.tif').convert('RGB')
+        gsimg = self.resizeProportionally(gsimg, 600, 600)
+
+        # nasz obraz z wykrytymi naczyniami
+        outputimg = Image.open('output.png').convert('RGB')
+
+        # porównujemy nasz obraz z gold standard i uzupełniamy macierz pomyłek jednocześnie zaznaczając pomyłki kolorami na obrazie
+        for x in range(outputimg.width):
+            for y in range(outputimg.height):
+                if outputimg.getpixel((x, y)) == WHITE and gsimg.getpixel((x, y)) == BLACK:
+                    outputimg.putpixel((x,y),RED)
+                    errormatrix[0,1] += 1
+                elif outputimg.getpixel((x, y)) == BLACK and gsimg.getpixel((x, y)) == WHITE:
+                    outputimg.putpixel((x,y),GREEN)
+                    errormatrix[1, 0] += 1
+                elif outputimg.getpixel((x, y)) == WHITE and gsimg.getpixel((x, y)) == WHITE:
+                    errormatrix[0, 0] += 1
+                else:
+                    errormatrix[1, 1] += 1
+
+        # wyświetlenie wyniku
+        self.setImage(outputimg, 2)
+
+        # wypisanie macierzy pomyłek (na konsole)
+        self.printErrorMatrix(errormatrix)
+
+        # wyliczenie miar skuteczności i dla danych niezrównoważonych
+        self.getMOEs(errormatrix)
+
+        # zapis do pliku
+        outputimg.save("output1.png")
+
+    def printErrorMatrix(self, matrix):
+        row_names = ['PP', 'PN']
+        column_names = ['AP', 'AN']
+
+        seplen = max(len(str(matrix[0, 0])), len(str(matrix[1, 0])))
+        dif = abs(len(str(matrix[0, 0])) - len(str(matrix[1, 0])))
+
+        row0 = ' ' * 5 + column_names[0] + ' ' * (seplen + 4) + column_names[1]
+        print(row0)
+        for row in range(2):
+            if len(str(matrix[row, 0])) == seplen:
+                print(row_names[row], ' ', matrix[row, 0], ' ' * seplen, matrix[row, 1])
+            else:
+                print(row_names[row], ' ', matrix[row, 0], ' ' * (seplen + dif), matrix[row, 1])
+        print()
+
+    def getMOEs(self, matrix):
+        TP = matrix[0, 0]
+        TN = matrix[1, 1]
+        FP = matrix[0, 1]
+        FN = matrix[1, 0]
+
+        accuracy = (TP + TN) / (TP + TN + FP + FN)
+        sensitivity = TP / (TP + FN)  # Recall
+        specificity = TN / (FP + TN)
+        precision = TP / (TP + FP)
+
+        # print('Measures of effectiveness:')
+        print('Accuracy:', accuracy)
+        print('Sensitivity/Recall:', sensitivity)
+        print('Specificity:', specificity)
+        print('Precision:', precision)
+        print()
+
+        G_mean = np.sqrt(sensitivity * specificity)
+        F_measure = (2 * precision * sensitivity) / (precision + sensitivity)
+
+        # print('Measures for unbalanced data:')
+        print('G-mean:', G_mean)
+        print('F-measure:', F_measure)
+
+
