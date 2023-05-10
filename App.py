@@ -124,7 +124,7 @@ class App:
         resimage = resimage.point( lambda p: 255 if p > 20 else 0 )
 
         # wyświetlenie wyniku
-        self.setImage(resimage, 1)
+        # self.setImage(resimage, 1)
 
         # zapis do pliku
         resimage.save("output.png")
@@ -141,10 +141,13 @@ class App:
         errormatrix = np.array([[0,0],[0,0]])
 
         # wzięcie odpowiedniego obrazu 'idealnego' (z folderu manual1) na podstawie wejściowego
-        inputimgname = self.images[0].filename[7:-4]
+        inputimgname = self.images[0].filename
+        inputimgname = inputimgname.replace('images', 'manual1')
+        inputimgname = inputimgname[:-4]+'.tif'
+
 
         # Gold Standard image
-        gsimg = Image.open('manual1/'+inputimgname+'.tif').convert('RGB')
+        gsimg = Image.open(inputimgname).convert('RGB')
         gsimg = self.resizeProportionally(gsimg, 600, 600)
 
         # nasz obraz z wykrytymi naczyniami
@@ -165,7 +168,7 @@ class App:
                     errormatrix[1, 1] += 1
 
         # wyświetlenie wyniku
-        self.setImage(outputimg, 2)
+        self.setImage(outputimg, 1)
 
         # wypisanie macierzy pomyłek (na konsole)
         self.printErrorMatrix(errormatrix)
