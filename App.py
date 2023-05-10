@@ -149,7 +149,8 @@ class App:
         # Gold Standard image
         gsimg = Image.open(inputimgname).convert('RGB')
         gsimg = self.resizeProportionally(gsimg, 600, 600)
-
+        gsimg = gsimg.point(lambda p: 255 if p > 20 else 0)
+        gsimg.save("scaled.png")
         # nasz obraz z wykrytymi naczyniami
         outputimg = Image.open('output.png').convert('RGB')
 
