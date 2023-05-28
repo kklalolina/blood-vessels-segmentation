@@ -11,6 +11,7 @@ from sklearn.neighbors import KNeighborsClassifier
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
+import time
 
 
 class App:
@@ -181,14 +182,20 @@ class App:
         # Calculate Hu Moments
         huMoments = cv2.HuMoments(moments)
 
+        # tu zmieniłem na operacje na tablicach za względu na wydajność
         # Log scale hu moments (After the following transformation, the moments are of comparable scale)
-        for i, _ in enumerate(huMoments):
-            if huMoments[i] != 0:
-                huMoments[i] = -1 * math.copysign(1.0, huMoments[i]) * math.log10(abs(huMoments[i]))
+        huMoments = -1 * np.sign(huMoments) * np.log10(np.abs(huMoments),  where=(huMoments != 0))
+        # for i, _ in enumerate(huMoments):
+        #     if huMoments[i] != 0:
+        #         huMoments[i] = -1 * math.copysign(1.0, huMoments[i]) * math.log10(abs(huMoments[i]))
+
+
         return [moment[0] for moment in huMoments]
 
 
     def trainClassifier(self):
+
+        start_time = time.time()
 
         self.applyParams()
 
@@ -213,7 +220,6 @@ class App:
         part_size = self.part_size
 
         parts = []
-
         # iterujemy po każdym pikselu w obrazku, dany piksel jest środkiem naszego fragmentu o rozmiarze part_size x part_size
         for y in range(height):
             for x in range(width):
@@ -245,6 +251,9 @@ class App:
 
         self.trained = True
 
+        end_time = time.time()
+        print("training: ", end_time-start_time, "s")
+
     def detectVesselsUsingClassifier(self):
 
         # jeżeli nie klikneliśmy trenuj klasyfikator to trenujemy teraz
@@ -262,8 +271,11 @@ class App:
         # rozmiar fragmentow z obrazka dla ktorych bedziemy obliczać Hu momenty
         part_size = self.part_size
 
-        result = np.array(np.zeros((height, width, 3)))
+        result = np.zeros((height, width, 3), dtype=np.uint8)
 
+        start_time = time.time()
+
+        hu_moments = []
         # iterujemy po każdym pikselu w obrazku, dany piksel jest środkiem naszego fragmentu o rozmiarze part_size x part_size
         for y in range(height):
             for x in range(width):
@@ -279,22 +291,36 @@ class App:
                     start_x = max(0, center_x)
                     end_x = min(width, center_x + part_size)
                     part = image[start_y:end_y, start_x:end_x]
-                # obliczamy hu moment fragmentu i wrzucamy go do klasyfikatora
-                pred = self.knn.predict([self.get_hu_moments(part)])
-                # klasyfikator zwraca [0] jeżeli nie naczynie i [255] jeżeli naczynie
-                # jeżeli wykryło naczynie to zmieniamy piksel obrazku wynikowym na biały (1,1,1 bo matplot tak zapisuje rgb)
-                if pred == [255]:
-                    result[y, x] = np.array([1, 1, 1])
+                # obliczamy hu moment fragmentu i wrzucamy go do tablicy
+                hu_moments.append(self.get_hu_moments(part))
+
+        end_time = time.time()
+        print("hu_moments: ", end_time-start_time, "s")
+
+        start_time = time.time()
+
+        WHITE = np.array([255, 255, 255])
+        # zrobienie predykcji raz na całej tablicy jest znacznie szybsze niż pojedyńczo na każdym elemencie
+        # klasyfikator zwraca [0] jeżeli nie naczynie i [255] jeżeli naczynie
+        # jeżeli wykryło naczynie to zmieniamy piksel obrazku wynikowym na biały
+        pred = self.knn.predict(hu_moments)
+        i = 0
+        for y in range(height):
+            for x in range(width):
+                if pred[i] == 255:
+                    result[y, x] = WHITE
+                i += 1
 
 
-        # zapisuje matplotem bo walczyłam z pilem ale nie wiem co zle robie ze nie jestem w stanie poprawnie zapisac nim np.array jako obraz
-        import matplotlib.pyplot as plt
-        plt.imsave('output.png', result)
-
-        result = Image.open('output.png')
+        # Image.fromarray i zapisywanie PILem nie działało, bo wymaga uint8 jako typu danych w tablicy, już działa
+        result = Image.fromarray(result)
+        result.save('output.png')
 
         self.setImage(result)
         self.createErrorMatrix(result)
+
+        end_time = time.time()
+        print("prediction: ", end_time-start_time, "s")
 
 
 
