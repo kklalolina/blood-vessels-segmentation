@@ -163,6 +163,39 @@ class App:
         resimage.save("output1.png")
         # self.createErrorMatrix()
 
+    def preprocess(self, image):
+
+        # używamy tylko kanału M (tak mi działa lepiej niż jakieś kanały z RGB) 
+        resimage =image.convert('CMYK').getchannel('M')
+
+        return resimage
+
+    def postprocess(self, image):
+        WHITE = np.array([255, 255, 255])
+        BLACK = np.array([0, 0, 0])
+
+        # usuwanie pojedynczych bialych pikseli z tla
+        resimage = image.copy()
+        d = 2
+        tr = 1 * 765
+        for x in range(d, image.shape[0]-d):
+            for y in range(d, image.shape[1]-d):
+                sum = np.sum(image[x-d:x+d+1, y-d:y+d+1])
+                if sum <= tr:
+                    resimage[x, y] = BLACK
+
+        # uzupelnianie ubytkow
+        d = 1
+        tc = ((2*d+1)*(2*d+1) - 4) * 765
+        for x in range(d, image.shape[0]-d):
+            for y in range(d, image.shape[1]-d):
+                sum = np.sum(image[x-d:x+d+1, y-d:y+d+1])
+                if sum >= tc:
+                    resimage[x, y] = WHITE
+
+        return resimage
+
+
     def getManual(self, inputimgname):
         # wzięcie odpowiedniego obrazu 'idealnego' (z folderu manual1) na podstawie wejściowego
         inputimgname = inputimgname.replace('images', 'manual1')
@@ -208,7 +241,9 @@ class App:
 
 
         # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
-        image = self.resizeProportionally(image, self.maxSize, self.maxSize).convert('L')
+        image = self.resizeProportionally(image, self.maxSize, self.maxSize)
+
+        image = self.preprocess(image)
 
         image = np.array(image)
         manual = np.array(manual)
@@ -263,8 +298,9 @@ class App:
         # bierzemy obrazek wejściowy i zmniejszamy aby obliczenia przebiegły szybciej
         image = self.getImage(0)
         image = self.resizeProportionally(image, self.maxSize, self.maxSize)
-        image = image.convert('L')
+        image = self.preprocess(image)
         image = np.array(image)
+        
 
         height, width = image.shape
 
@@ -312,6 +348,7 @@ class App:
                 i += 1
 
 
+        result = self.postprocess(result)
         # Image.fromarray i zapisywanie PILem nie działało, bo wymaga uint8 jako typu danych w tablicy, już działa
         result = Image.fromarray(result)
         result.save('output.png')
