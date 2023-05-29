@@ -22,13 +22,13 @@ class App:
         #display settings
         self.windowWidth = 1500
         self.windowHeight = 800
-        self.maxImageDisplayWidth = 400
-        self.maxImageDisplayHeight = 400
+        self.maxImageDisplayWidth = 600
+        self.maxImageDisplayHeight = 600
 
-        self.numberOfNeighbors = 3
+        self.numberOfNeighbors = 6
         self.part_size = 5
         # maksymalna wartość jaką może mieć szerokość i wysokość obrazka (aby obliczenia szybciej przebiegały)
-        self.maxSize = 400
+        self.maxSize = 600
 
         self.trained = False
 
@@ -168,6 +168,9 @@ class App:
         # używamy tylko kanału M (tak mi działa lepiej niż jakieś kanały z RGB) 
         resimage =image.convert('CMYK').getchannel('M')
 
+        # podbijamy kontrast
+        resimage = ImageEnhance.Contrast(resimage).enhance(1.8)
+
         return resimage
 
     def postprocess(self, image):
@@ -176,8 +179,8 @@ class App:
 
         # usuwanie pojedynczych bialych pikseli z tla
         resimage = image.copy()
-        d = 2
-        tr = 1 * 765
+        d = 1
+        tr = 2 * 765
         for x in range(d, image.shape[0]-d):
             for y in range(d, image.shape[1]-d):
                 sum = np.sum(image[x-d:x+d+1, y-d:y+d+1])
@@ -232,57 +235,61 @@ class App:
 
         self.applyParams()
 
-
-        # bierzemy pierwszy obrazek i na jego podstawie klasyfikujemy
-        image = Image.open('images/01_dr.JPG')
-
-        # bierzemy odpowiadajaca maske ekspercka
-        manual = self.getManual(image.filename).convert('L')
-
-
-        # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
-        image = self.resizeProportionally(image, self.maxSize, self.maxSize)
-
-        image = self.preprocess(image)
-
-        image = np.array(image)
-        manual = np.array(manual)
-        manual = manual.flatten()
-
-        height, width = image.shape
-
-        # rozmiar fragmentow z obrazka dla ktorych bedziemy obliczać Hu momenty
-        part_size = self.part_size
-
-        parts = []
-        # iterujemy po każdym pikselu w obrazku, dany piksel jest środkiem naszego fragmentu o rozmiarze part_size x part_size
-        for y in range(height):
-            for x in range(width):
-                center_y = y - part_size // 2
-                center_x = x - part_size // 2
-
-                if center_y >= 0 and center_y + part_size <= height and center_x >= 0 and center_x + part_size <= width:
-                    part = image[center_y:center_y + part_size, center_x:center_x + part_size]
-                    parts.append(part)
-                else:
-                    # jeżeli piksel brzegowy to bierzemy piksele z fragmentu mieszczace sie w obrazku
-                    start_y = max(0, center_y)
-                    end_y = min(height, center_y + part_size)
-                    start_x = max(0, center_x)
-                    end_x = min(width, center_x + part_size)
-                    part = image[start_y:end_y, start_x:end_x]
-                    parts.append(part)
-
-        huMoments = []
-
-        # obliczamy hu moment dla każdego fragmentu
-        for part in parts:
-            huMoments.append(self.get_hu_moments(part))
         # inicjujemy klasyfikator knn podając liczbę sąsiadów
         self.knn = KNeighborsClassifier(n_neighbors=self.numberOfNeighbors)
 
-        # trenujemy klasyfikator podając hu momenty i odpowiadające wartości pikseli z maski eksperckiej
-        self.knn.fit(huMoments, manual)
+        files = ['images/01_dr.JPG','images/01_g.jpg', 'images/05_dr.JPG','images/01_g.jpg', 'images/15_g.jpg','images/10_dr.JPG', 'images/09_h.jpg', 'images/06_dr.JPG', 'images/05_h.jpg', 'images/13_dr.JPG', 'images/11_h.jpg']
+
+        for file in files:
+
+            # bierzemy obrazek i na jego podstawie klasyfikujemy
+            image = Image.open(file)
+
+            # bierzemy odpowiadajaca maske ekspercka
+            manual = self.getManual(image.filename).convert('L')
+
+
+            # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
+            image = self.resizeProportionally(image, self.maxSize, self.maxSize)
+
+            image = self.preprocess(image)
+
+            image = np.array(image)
+            manual = np.array(manual)
+            manual = manual.flatten()
+
+            height, width = image.shape
+
+            # rozmiar fragmentow z obrazka dla ktorych bedziemy obliczać Hu momenty
+            part_size = self.part_size
+
+            parts = []
+            # iterujemy po każdym pikselu w obrazku, dany piksel jest środkiem naszego fragmentu o rozmiarze part_size x part_size
+            for y in range(height):
+                for x in range(width):
+                    center_y = y - part_size // 2
+                    center_x = x - part_size // 2
+
+                    if center_y >= 0 and center_y + part_size <= height and center_x >= 0 and center_x + part_size <= width:
+                        part = image[center_y:center_y + part_size, center_x:center_x + part_size]
+                        parts.append(part)
+                    else:
+                        # jeżeli piksel brzegowy to bierzemy piksele z fragmentu mieszczace sie w obrazku
+                        start_y = max(0, center_y)
+                        end_y = min(height, center_y + part_size)
+                        start_x = max(0, center_x)
+                        end_x = min(width, center_x + part_size)
+                        part = image[start_y:end_y, start_x:end_x]
+                        parts.append(part)
+
+            huMoments = []
+
+            # obliczamy hu moment dla każdego fragmentu
+            for part in parts:
+                huMoments.append(self.get_hu_moments(part))
+
+            # trenujemy klasyfikator podając hu momenty i odpowiadające wartości pikseli z maski eksperckiej
+            self.knn.fit(huMoments, manual)
 
         self.trained = True
 
