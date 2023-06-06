@@ -2,6 +2,7 @@ from tkinter import Tk, Label, Scale, Button, Text, Checkbutton, messagebox, Ent
 
 from PIL import ImageTk, Image, ImageDraw, ImageOps, ImageFilter, ImageEnhance
 
+import pickle
 import math
 import numpy as np
 import cv2
@@ -20,10 +21,10 @@ class App:
 
         
         #display settings
-        self.windowWidth = 1500
-        self.windowHeight = 800
-        self.maxImageDisplayWidth = 600
-        self.maxImageDisplayHeight = 600
+        self.windowWidth = 1920
+        self.windowHeight = 1000
+        self.maxImageDisplayWidth = 400
+        self.maxImageDisplayHeight = 400
 
         self.numberOfNeighbors = 6
         self.part_size = 5
@@ -66,6 +67,17 @@ class App:
         partsizeInput = Entry(self.window, textvariable=self.partsizeVar, width = 10, justify='center', validate="key")
         self.partsizeVar.set(self.part_size)
 
+        # saving and loading model controls
+
+        saveModelButton = Button(self.window, text="Zapisz klasyfikator", width=20, command=self.saveModel)
+        self.modelFilenameVar = StringVar()
+        modelFilenameInput = Entry(self.window, textvariable=self.modelFilenameVar, width = 30)
+        self.modelFilenameVar.set('nazwa_nowego_modelu')
+
+        loadModelButton = Button(self.window, text="Wczytaj klasyfikator", width=20, command=self.loadModel)
+
+        self.currentModelLabel = Label(self.window, text='Nie wczytano modelu')
+
         # layout
         startButton.grid(column=1,row=5)
 
@@ -83,6 +95,11 @@ class App:
         selectFileTitleLabel.grid(column=0, row = 4, sticky='W')
         selectFileButton.grid(column=1, row = 4)
         self.selectedFileNameLabel.grid(column=2, row=4)
+
+        saveModelButton.grid(column=2, row=9)
+        modelFilenameInput.grid(column=3, row=9)
+        loadModelButton.grid(column=2, row=10)
+        self.currentModelLabel.grid(column=2, row=11)
 
         self.setImage(Image.open('images/01_dr.JPG'), 0)
 
@@ -131,6 +148,34 @@ class App:
             self.selectedFileNameLabel.config(text=filename[filename.rindex('/')+1:])
 
             self.setImage(Image.open(filename), 0)
+
+    def saveModel(self):
+
+        if not self.trained:
+            self.statusLabel.config(text='Brak modelu do zapisania')
+            return
+        
+        filename = self.modelFilenameVar.get()
+        filename += '.knn'
+
+        if filename != '':
+            file = open(filename, 'wb')
+            pickle.dump(self.knn, file)
+            file.close()
+            self.currentModelLabel.config(text=filename)
+            self.statusLabel.config(text='zapisano model')
+
+    def loadModel(self):
+        
+        filename = filedialog.askopenfilename()
+
+        if filename != '':
+            file = open(filename, 'rb')
+            self.knn = pickle.load(file)
+            file.close
+            self.trained = True
+            self.currentModelLabel.config(text=filename[filename.rindex('/')+1:])
+            self.statusLabel.config(text='wczytano model')
 
     def applyParams(self):
         self.part_size = int(self.partsizeVar.get())
@@ -292,6 +337,7 @@ class App:
             self.knn.fit(huMoments, manual)
 
         self.trained = True
+        self.currentModelLabel.config(text='Nowy Model')
 
         end_time = time.time()
         print("training: ", end_time-start_time, "s")
