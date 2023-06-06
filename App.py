@@ -4,6 +4,9 @@ from PIL import ImageTk, Image, ImageDraw, ImageOps, ImageFilter, ImageEnhance
 
 import pickle
 import math
+from os import listdir
+from os.path import isfile, join
+
 import numpy as np
 import cv2
 from sklearn.neighbors import KNeighborsClassifier
@@ -31,7 +34,11 @@ class App:
         # maksymalna wartość jaką może mieć szerokość i wysokość obrazka (aby obliczenia szybciej przebiegały)
         self.maxSize = 600
 
+        self.output_dir = 'output/'
+        self.models_dir = 'models/'
+
         self.trained = False
+        self.trainingSetDirectory = 'training_set_1'
 
 
         # window
@@ -66,6 +73,8 @@ class App:
         self.partsizeVar = StringVar()
         partsizeInput = Entry(self.window, textvariable=self.partsizeVar, width = 10, justify='center', validate="key")
         self.partsizeVar.set(self.part_size)
+        
+        selectTrainingSetButton = Button(self.window, text="Wybierz zbiór treningowy", width=20, command=self.selectTrainingSet)
 
         # saving and loading model controls
 
@@ -87,8 +96,8 @@ class App:
 
         partsizeLabel.grid(column=0, row=10, sticky='N')
         partsizeInput.grid(column=0, row=11)
-
-        trainButton.grid(column=0, row=12, pady='10')
+        selectTrainingSetButton.grid(column=0, row=12, pady='10')
+        trainButton.grid(column=0, row=13, pady='10')
 
         self.statusLabel.grid(column=4, row=4)
 
@@ -149,6 +158,13 @@ class App:
 
             self.setImage(Image.open(filename), 0)
 
+    # Folder ze zbiorem treningowym musi zwierać dwa fodlery: images i manual. W folderze images znajdują się zdjęcia siatkówki, a w manual odpowiadające im maski eksperckie. Po posortowaniu plików po nazwach odpowiadjące sobie obrazy muszą być na tych samych pozycjach. 
+    def selectTrainingSet(self):
+        directory = filedialog.askdirectory()
+
+        if directory != '':
+            self.trainingSetDirectory = directory 
+
     def saveModel(self):
 
         if not self.trained:
@@ -159,7 +175,7 @@ class App:
         filename += '.knn'
 
         if filename != '':
-            file = open(filename, 'wb')
+            file = open(self.models_dir + filename, 'wb')
             pickle.dump(self.knn, file)
             file.close()
             self.currentModelLabel.config(text=filename)
@@ -205,18 +221,39 @@ class App:
         self.setImage(resimage, 3)
 
         # zapis do pliku
-        resimage.save("output1.png")
+        resimage.save(self.output_dir + "output1.png")
         # self.createErrorMatrix()
 
-    def preprocess(self, image):
+    def preprocessImage(self, image):
+
+        # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
+        image = self.resizeProportionally(image, self.maxSize, self.maxSize)
+
+        image.save(self.output_dir + 'in_res.png')
 
         # używamy tylko kanału M (tak mi działa lepiej niż jakieś kanały z RGB) 
-        resimage =image.convert('CMYK').getchannel('M')
+        image = image.convert('CMYK').getchannel('M')
+
+        image.save(self.output_dir + 'in_mag.png')
 
         # podbijamy kontrast
-        resimage = ImageEnhance.Contrast(resimage).enhance(1.8)
+        image = ImageEnhance.Contrast(image).enhance(1.8)
 
-        return resimage
+        image.save(self.output_dir + 'in_con.png')
+
+        return image
+    
+    def preprocessManual(self, manual):
+
+        manual = manual.convert('L')
+
+        # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
+        manual = self.resizeProportionally(manual, self.maxSize, self.maxSize)
+
+        manual = manual.point(lambda p: 255 if p > 20 else 0)
+        manual.save(self.output_dir + "scaled.png")
+
+        return manual
 
     def postprocess(self, image):
         WHITE = np.array([255, 255, 255])
@@ -253,7 +290,7 @@ class App:
         gsimg = Image.open(inputimgname).convert('RGB')
         gsimg = self.resizeProportionally(gsimg, self.maxSize, self.maxSize)
         gsimg = gsimg.point(lambda p: 255 if p > 20 else 0)
-        gsimg.save("scaled.png")
+        gsimg.save(self.output_dir + "scaled.png")
         return gsimg
 
     # from https://learnopencv.com/shape-matching-using-hu-moments-c-python/
@@ -283,21 +320,24 @@ class App:
         # inicjujemy klasyfikator knn podając liczbę sąsiadów
         self.knn = KNeighborsClassifier(n_neighbors=self.numberOfNeighbors)
 
-        files = ['images/01_dr.JPG','images/01_g.jpg', 'images/05_dr.JPG','images/01_g.jpg', 'images/15_g.jpg','images/10_dr.JPG', 'images/09_h.jpg', 'images/06_dr.JPG', 'images/05_h.jpg', 'images/13_dr.JPG', 'images/11_h.jpg']
 
-        for file in files:
+        imagesDirectory = self.trainingSetDirectory + '/images'
+        manualDirectory = self.trainingSetDirectory + '/manual'
+        images = [f for f in listdir(imagesDirectory) if isfile(join(imagesDirectory, f))]
+        images.sort()
+        manuals = [f for f in listdir(manualDirectory) if isfile(join(manualDirectory, f))]
+        manuals.sort()
+
+        for fid in range(len(images)):
 
             # bierzemy obrazek i na jego podstawie klasyfikujemy
-            image = Image.open(file)
+            image = Image.open(join(imagesDirectory, images[fid]))
 
             # bierzemy odpowiadajaca maske ekspercka
-            manual = self.getManual(image.filename).convert('L')
+            manual = Image.open(join(manualDirectory, manuals[fid]))
 
-
-            # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
-            image = self.resizeProportionally(image, self.maxSize, self.maxSize)
-
-            image = self.preprocess(image)
+            image = self.preprocessImage(image)
+            manual = self.preprocessManual(manual)
 
             image = np.array(image)
             manual = np.array(manual)
@@ -344,14 +384,13 @@ class App:
 
     def detectVesselsUsingClassifier(self):
 
-        # jeżeli nie klikneliśmy trenuj klasyfikator to trenujemy teraz
+        # jeżeli nie wytrenowaliśmy ani nie wczytaliśmy klasyfikatora to trenujemy teraz
         if not self.trained:
             self.trainClassifier()
 
         # bierzemy obrazek wejściowy i zmniejszamy aby obliczenia przebiegły szybciej
         image = self.getImage(0)
-        image = self.resizeProportionally(image, self.maxSize, self.maxSize)
-        image = self.preprocess(image)
+        image = self.preprocessImage(image)
         image = np.array(image)
         
 
@@ -404,9 +443,9 @@ class App:
         result = self.postprocess(result)
         # Image.fromarray i zapisywanie PILem nie działało, bo wymaga uint8 jako typu danych w tablicy, już działa
         result = Image.fromarray(result)
-        result.save('output.png')
+        result.save(self.output_dir + 'output.png')
 
-        self.setImage(result)
+        self.setImage(result, 1)
         self.createErrorMatrix(result)
 
         end_time = time.time()
@@ -421,7 +460,6 @@ class App:
         RED = (255,0,0)
         GREEN = (0,255,0)
 
-        lmaxSize = max(image.size)
         # macierz pomyłek
         errormatrix = np.array([[0,0],[0,0]])
 
@@ -433,11 +471,11 @@ class App:
 
         # Gold Standard image
         gsimg = Image.open(inputimgname).convert('RGB')
-        gsimg = self.resizeProportionally(gsimg, lmaxSize, lmaxSize)
+        gsimg = gsimg.resize(image.size)
         gsimg = gsimg.point(lambda p: 255 if p > 20 else 0)
-        gsimg.save("scaled.png")
+        gsimg.save(self.output_dir + "scaled.png")
         # nasz obraz z wykrytymi naczyniami
-        outputimg = Image.open('output.png').convert('RGB')
+        outputimg = Image.open(self.output_dir + 'output.png').convert('RGB')
 
         # porównujemy nasz obraz z gold standard i uzupełniamy macierz pomyłek jednocześnie zaznaczając pomyłki kolorami na obrazie
         for x in range(outputimg.width):
@@ -454,7 +492,7 @@ class App:
                     errormatrix[1, 1] += 1
 
         # wyświetlenie wyniku
-        self.setImage(outputimg)
+        self.setImage(outputimg, 2)
 
         # wypisanie macierzy pomyłek (na konsole)
         self.printErrorMatrix(errormatrix)
@@ -464,7 +502,7 @@ class App:
         self.getMOEs(errormatrix)
 
         # zapis do pliku
-        outputimg.save("output1.png")
+        outputimg.save(self.output_dir + "output1.png")
 
     def printErrorMatrix(self, matrix):
         row_names = ['PP', 'PN']
@@ -501,10 +539,10 @@ class App:
         plt.yticks(y_ticks, y_labels)
 
         plt.colorbar()
-        plt.savefig('matrix.png')
+        plt.savefig(self.output_dir + 'matrix.png')
 
-        matrixImg = Image.open('matrix.png')
-        self.setImage(matrixImg)
+        matrixImg = Image.open(self.output_dir + 'matrix.png')
+        self.setImage(matrixImg, 3)
 
 
     def getMOEs(self, matrix):
