@@ -229,17 +229,11 @@ class App:
         # zmiejszamy obrazek żeby obliczenia szybciej przebiegły
         image = self.resizeProportionally(image, self.maxSize, self.maxSize)
 
-        image.save(self.output_dir + 'in_res.png')
-
         # używamy tylko kanału M (tak mi działa lepiej niż jakieś kanały z RGB) 
         image = image.convert('CMYK').getchannel('M')
 
-        image.save(self.output_dir + 'in_mag.png')
-
         # podbijamy kontrast
         image = ImageEnhance.Contrast(image).enhance(1.8)
-
-        image.save(self.output_dir + 'in_con.png')
 
         return image
     
