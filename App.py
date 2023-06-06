@@ -40,6 +40,9 @@ class App:
         self.trained = False
         self.trainingSetDirectory = 'training_set_1'
 
+        self.currentImageName = 'default'
+        self.currentModelName = 'default'
+
 
         # window
         self.window = Tk()
@@ -159,7 +162,7 @@ class App:
 
             self.setImage(Image.open(filename), 0)
 
-    # Folder ze zbiorem treningowym musi zwierać dwa fodlery: images i manual. W folderze images znajdują się zdjęcia siatkówki, a w manual odpowiadające im maski eksperckie. Po posortowaniu plików po nazwach odpowiadjące sobie obrazy muszą być na tych samych pozycjach. 
+    # Folder ze zbiorem treningowym musi zwierać dwa foldery: images i manual. W folderze images znajdują się zdjęcia siatkówki, a w manual odpowiadające im maski eksperckie. Po posortowaniu plików po nazwach odpowiadjące sobie obrazy muszą być na tych samych pozycjach. 
     def selectTrainingSet(self):
         directory = filedialog.askdirectory()
 
@@ -297,6 +300,9 @@ class App:
 
     def trainClassifier(self):
 
+        self.statusLabel.config(text='Uczenie klasyfikatora...')
+        self.window.update()
+
         start_time = time.time()
 
         self.applyParams()
@@ -367,8 +373,13 @@ class App:
         end_time = time.time()
         print("training: ", end_time-start_time, "s")
 
+        self.statusLabel.config(text='Uczenie zakończone')
+
     def detectVesselsUsingClassifier(self):
         
+        self.statusLabel.config(text='Detekcja naczyń krwionośnych')
+        self.window.update()
+
         if not exists(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/'):
             makedirs(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/')
 
@@ -416,7 +427,7 @@ class App:
         start_time = time.time()
 
         WHITE = np.array([255, 255, 255])
-        # zrobienie predykcji raz na całej tablicy jest znacznie szybsze niż pojedyńczo na każdym elemencie
+
         # klasyfikator zwraca [0] jeżeli nie naczynie i [255] jeżeli naczynie
         # jeżeli wykryło naczynie to zmieniamy piksel obrazku wynikowym na biały
         pred = self.knn.predict(hu_moments)
@@ -429,7 +440,7 @@ class App:
 
 
         result = self.postprocess(result)
-        # Image.fromarray i zapisywanie PILem nie działało, bo wymaga uint8 jako typu danych w tablicy, już działa
+        
         result = Image.fromarray(result)
         result.save(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'output.png')
 
@@ -439,7 +450,7 @@ class App:
         end_time = time.time()
         print("prediction: ", end_time-start_time, "s")
 
-
+        self.statusLabel.config(text='Detekcja zakończona')
 
     def createErrorMatrix(self, image):
         # kolory w RGB
