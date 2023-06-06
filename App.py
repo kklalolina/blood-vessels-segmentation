@@ -4,8 +4,8 @@ from PIL import ImageTk, Image, ImageDraw, ImageOps, ImageFilter, ImageEnhance
 
 import pickle
 import math
-from os import listdir
-from os.path import isfile, join
+from os import listdir, makedirs
+from os.path import isfile, join, exists
 
 import numpy as np
 import cv2
@@ -155,6 +155,7 @@ class App:
         if filename != '':
             self.inputImageFile = filename
             self.selectedFileNameLabel.config(text=filename[filename.rindex('/')+1:])
+            self.currentImageName = filename[filename.rindex('/')+1:]
 
             self.setImage(Image.open(filename), 0)
 
@@ -191,6 +192,7 @@ class App:
             file.close
             self.trained = True
             self.currentModelLabel.config(text=filename[filename.rindex('/')+1:])
+            self.currentModelName = filename[filename.rindex('/')+1:]
             self.statusLabel.config(text='wczytano model')
 
     def applyParams(self):
@@ -221,7 +223,7 @@ class App:
         self.setImage(resimage, 3)
 
         # zapis do pliku
-        resimage.save(self.output_dir + "output1.png")
+        # resimage.save(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + "output1.png")
         # self.createErrorMatrix()
 
     def preprocessImage(self, image):
@@ -274,18 +276,6 @@ class App:
 
         return resimage
 
-
-    def getManual(self, inputimgname):
-        # wzięcie odpowiedniego obrazu 'idealnego' (z folderu manual1) na podstawie wejściowego
-        inputimgname = inputimgname.replace('images', 'manual1')
-        inputimgname = inputimgname[:-4] + '.tif'
-
-        # Gold Standard image
-        gsimg = Image.open(inputimgname).convert('RGB')
-        gsimg = self.resizeProportionally(gsimg, self.maxSize, self.maxSize)
-        gsimg = gsimg.point(lambda p: 255 if p > 20 else 0)
-        gsimg.save(self.output_dir + "scaled.png")
-        return gsimg
 
     # from https://learnopencv.com/shape-matching-using-hu-moments-c-python/
     def get_hu_moments(self, img_part):
@@ -378,6 +368,9 @@ class App:
         print("training: ", end_time-start_time, "s")
 
     def detectVesselsUsingClassifier(self):
+        
+        if not exists(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/'):
+            makedirs(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/')
 
         # jeżeli nie wytrenowaliśmy ani nie wczytaliśmy klasyfikatora to trenujemy teraz
         if not self.trained:
@@ -438,7 +431,7 @@ class App:
         result = self.postprocess(result)
         # Image.fromarray i zapisywanie PILem nie działało, bo wymaga uint8 jako typu danych w tablicy, już działa
         result = Image.fromarray(result)
-        result.save(self.output_dir + 'output.png')
+        result.save(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'output.png')
 
         self.setImage(result, 1)
         self.createErrorMatrix(result)
@@ -470,7 +463,7 @@ class App:
         gsimg = gsimg.point(lambda p: 255 if p > 20 else 0)
         gsimg.save(self.output_dir + "scaled.png")
         # nasz obraz z wykrytymi naczyniami
-        outputimg = Image.open(self.output_dir + 'output.png').convert('RGB')
+        outputimg = Image.open(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'output.png').convert('RGB')
 
         # porównujemy nasz obraz z gold standard i uzupełniamy macierz pomyłek jednocześnie zaznaczając pomyłki kolorami na obrazie
         for x in range(outputimg.width):
@@ -497,7 +490,7 @@ class App:
         self.getMOEs(errormatrix)
 
         # zapis do pliku
-        outputimg.save(self.output_dir + "output1.png")
+        outputimg.save(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + "output1.png")
 
     def printErrorMatrix(self, matrix):
         row_names = ['PP', 'PN']
@@ -518,6 +511,9 @@ class App:
         # zapisanie i wyświetlenie macierzy jako wykres
         custom_cmap = mcolors.LinearSegmentedColormap.from_list('custom_cmap', ['white', 'green'])
 
+        plt.clf()
+        plt.cla()
+        
         plt.imshow(matrix, cmap=custom_cmap)
 
         x_ticks = np.arange(len(matrix[0]))
@@ -533,10 +529,10 @@ class App:
         plt.xticks(x_ticks, x_labels)
         plt.yticks(y_ticks, y_labels)
 
-        plt.colorbar()
-        plt.savefig(self.output_dir + 'matrix.png')
+        # plt.colorbar()
+        plt.savefig(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'matrix.png')
 
-        matrixImg = Image.open(self.output_dir + 'matrix.png')
+        matrixImg = Image.open(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'matrix.png')
         self.setImage(matrixImg, 3)
 
 
@@ -551,18 +547,21 @@ class App:
         specificity = TN / (FP + TN)
         precision = TP / (TP + FP)
 
+        resultsFile = open(self.output_dir + self.currentImageName + '/' + self.currentModelName + '/' + 'stats.txt', 'w')
+
         # print('Measures of effectiveness:')
-        print('Accuracy:', accuracy)
-        print('Sensitivity/Recall:', sensitivity)
-        print('Specificity:', specificity)
-        print('Precision:', precision)
-        print()
+        resultsFile.write('Accuracy: ' + str(accuracy) + '\n')
+        resultsFile.write('Sensitivity/Recall: ' +  str(sensitivity) + '\n')
+        resultsFile.write('Specificity: ' +  str(specificity) + '\n')
+        resultsFile.write('Precision: ' +  str(precision) + '\n')
 
         G_mean = np.sqrt(sensitivity * specificity)
         F_measure = (2 * precision * sensitivity) / (precision + sensitivity)
 
         # print('Measures for unbalanced data:')
-        print('G-mean:', G_mean)
-        print('F-measure:', F_measure)
+        resultsFile.write('G-mean: ' +  str(G_mean) + '\n')
+        resultsFile.write('F-measure: ' + str(F_measure) + '\n')
+
+        resultsFile.close()
 
 
