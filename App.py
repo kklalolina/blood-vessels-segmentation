@@ -313,6 +313,7 @@ class App:
 
         # inicjujemy klasyfikator knn podając liczbę sąsiadów
         self.knn = KNeighborsClassifier(n_neighbors=self.numberOfNeighbors)
+        self.knn.part_size = self.part_size
 
 
         imagesDirectory = self.trainingSetDirectory + '/images'
@@ -340,7 +341,7 @@ class App:
             height, width = image.shape
 
             # rozmiar fragmentow z obrazka dla ktorych bedziemy obliczać Hu momenty
-            part_size = self.part_size
+            part_size = self.knn.part_size
 
             parts = []
             # iterujemy po każdym pikselu w obrazku, dany piksel jest środkiem naszego fragmentu o rozmiarze part_size x part_size
@@ -391,7 +392,7 @@ class App:
         height, width = image.shape
 
         # rozmiar fragmentow z obrazka dla ktorych bedziemy obliczać Hu momenty
-        part_size = self.part_size
+        part_size = self.knn.part_size
 
         result = np.zeros((height, width, 3), dtype=np.uint8)
 
